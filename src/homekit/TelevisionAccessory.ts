@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Service, PlatformAccessory } from 'homebridge';
 import { ADBCastPlatform } from '../platform.js';
 import { CastClient } from '../cast/CastClient.js';
@@ -19,7 +20,7 @@ const appPackageMap: { [key: string]: { package: string, type: number, key?: num
   'Hulu': { package: 'com.hulu.livingroomplus', type: 10 },
   'HBO Max': { package: 'com.hbo.hbonow', type: 10 },
   'Spotify': { package: 'com.spotify.tv.android', type: 10 },
-  'Plex': { package: 'com.plexapp.android', type: 10 }
+  'Plex': { package: 'com.plexapp.android', type: 10 },
 };
 
 export class TelevisionAccessory {
@@ -38,7 +39,7 @@ export class TelevisionAccessory {
     private readonly platform: ADBCastPlatform,
     private readonly tvAccessory: PlatformAccessory,
     private readonly bulbAccessory: PlatformAccessory,
-    ip: string
+    ip: string,
   ) {
     const devices = this.platform.config.devices || [];
     const deviceConfig = devices.find((d: any) => d.ip === ip) || {};
@@ -50,20 +51,20 @@ export class TelevisionAccessory {
     this.androidTVClient = new AndroidTVClient(ip, this.platform.config.pairingCode, cert);
     
     if (adbIpPort) {
-        const port = parseInt(adbIpPort.split(':')[1]) || 5555;
-        this.platform.log.info(`[TelevisionAccessory] Initializing ADB Client for ${ip}:${port}`);
-        this.adbClient = new ADBClient(ip, port, (msg, isError) => {
-            if (isError) {
-                this.platform.log.error(`[ADBClient] ${msg}`);
-            } else {
-                this.platform.log.info(`[ADBClient] ${msg}`);
-            }
-        });
+      const port = parseInt(adbIpPort.split(':')[1]) || 5555;
+      this.platform.log.info(`[TelevisionAccessory] Initializing ADB Client for ${ip}:${port}`);
+      this.adbClient = new ADBClient(ip, port, (msg, isError) => {
+        if (isError) {
+          this.platform.log.error(`[ADBClient] ${msg}`);
+        } else {
+          this.platform.log.info(`[ADBClient] ${msg}`);
+        }
+      });
     }
     
     this.mediaStateManager = new MediaStateManager(this.castClient, this.androidTVClient, this.adbClient);
 
-    this.androidTVClient.on('ready', (cert) => {
+    this.androidTVClient.on('ready', () => {
       this.platform.log.info(`[AndroidTV] Successfully paired and connected to ${ip}`);
     });
 
@@ -90,7 +91,7 @@ export class TelevisionAccessory {
     this.tvService.setCharacteristic(this.platform.Characteristic.ConfiguredName, tvAccessory.context.device.name);
     this.tvService.setCharacteristic(
       this.platform.Characteristic.SleepDiscoveryMode,
-      this.platform.Characteristic.SleepDiscoveryMode.ALWAYS_DISCOVERABLE
+      this.platform.Characteristic.SleepDiscoveryMode.ALWAYS_DISCOVERABLE,
     );
 
     this.tvService.getCharacteristic(this.platform.Characteristic.Active)
@@ -137,10 +138,10 @@ export class TelevisionAccessory {
       .onSet(async (value) => {
         const selector = value as number;
         if (selector === this.platform.Characteristic.VolumeSelector.INCREMENT) {
-          this.platform.log.info(`[TV Speaker] Volume Up`);
+          this.platform.log.info('[TV Speaker] Volume Up');
           await this.androidTVClient.sendKey(24);
         } else {
-          this.platform.log.info(`[TV Speaker] Volume Down`);
+          this.platform.log.info('[TV Speaker] Volume Down');
           await this.androidTVClient.sendKey(25);
         }
       });
@@ -210,7 +211,9 @@ export class TelevisionAccessory {
     let id = 1;
     for (const inputName of enabledInputs) {
       const target = appPackageMap[inputName];
-      if (!target) continue;
+      if (!target) {
+        continue;
+      }
 
       const inputService = this.tvAccessory.addService(this.platform.Service.InputSource, inputName.toLowerCase(), inputName);
       
@@ -232,10 +235,14 @@ export class TelevisionAccessory {
     const enabledInputs = deviceConfig.inputs || ['Home', 'YouTube', 'Netflix', 'Prime Video'];
     
     const inputName = enabledInputs[id - 1];
-    if (!inputName) return;
+    if (!inputName) {
+      return;
+    }
 
     const target = appPackageMap[inputName];
-    if (!target) return;
+    if (!target) {
+      return;
+    }
 
     try {
       if (inputName === 'Home') {
@@ -244,7 +251,7 @@ export class TelevisionAccessory {
       }
       
       if (this.adbClient) {
-        const { stdout } = await execAsync(`adb devices`);
+        const { stdout } = await execAsync('adb devices');
         if (stdout.includes(this.tvAccessory.context.device.ip)) {
           this.platform.log.info(`[TV Input] Launching app ${inputName} (${target.package}) over ADB`);
           await execAsync(`adb -s ${this.tvAccessory.context.device.ip}:5555 shell monkey -p ${target.package} -c android.intent.category.LAUNCHER 1`);
@@ -258,45 +265,45 @@ export class TelevisionAccessory {
   private async handleRemoteKey(key: number) {
     const Char = this.platform.Characteristic;
     switch (key) {
-      case Char.RemoteKey.REWIND:
-        await this.androidTVClient.sendKey(89);
-        break;
-      case Char.RemoteKey.FAST_FORWARD:
-        await this.androidTVClient.sendKey(90);
-        break;
-      case Char.RemoteKey.NEXT_TRACK:
-        await this.androidTVClient.sendKey(87);
-        break;
-      case Char.RemoteKey.PREVIOUS_TRACK:
-        await this.androidTVClient.sendKey(88);
-        break;
-      case Char.RemoteKey.ARROW_UP:
-        await this.androidTVClient.sendKey(19);
-        break;
-      case Char.RemoteKey.ARROW_DOWN:
-        await this.androidTVClient.sendKey(20);
-        break;
-      case Char.RemoteKey.ARROW_LEFT:
-        await this.androidTVClient.sendKey(21);
-        break;
-      case Char.RemoteKey.ARROW_RIGHT:
-        await this.androidTVClient.sendKey(22);
-        break;
-      case Char.RemoteKey.SELECT:
-        await this.androidTVClient.sendKey(66);
-        break;
-      case Char.RemoteKey.BACK:
-        await this.androidTVClient.sendKey(4);
-        break;
-      case Char.RemoteKey.EXIT:
-        await this.androidTVClient.sendKey(4);
-        break;
-      case Char.RemoteKey.PLAY_PAUSE:
-        await this.androidTVClient.sendKey(85);
-        break;
-      case Char.RemoteKey.INFORMATION:
-        await this.androidTVClient.sendKey(82);
-        break;
+    case Char.RemoteKey.REWIND:
+      await this.androidTVClient.sendKey(89);
+      break;
+    case Char.RemoteKey.FAST_FORWARD:
+      await this.androidTVClient.sendKey(90);
+      break;
+    case Char.RemoteKey.NEXT_TRACK:
+      await this.androidTVClient.sendKey(87);
+      break;
+    case Char.RemoteKey.PREVIOUS_TRACK:
+      await this.androidTVClient.sendKey(88);
+      break;
+    case Char.RemoteKey.ARROW_UP:
+      await this.androidTVClient.sendKey(19);
+      break;
+    case Char.RemoteKey.ARROW_DOWN:
+      await this.androidTVClient.sendKey(20);
+      break;
+    case Char.RemoteKey.ARROW_LEFT:
+      await this.androidTVClient.sendKey(21);
+      break;
+    case Char.RemoteKey.ARROW_RIGHT:
+      await this.androidTVClient.sendKey(22);
+      break;
+    case Char.RemoteKey.SELECT:
+      await this.androidTVClient.sendKey(66);
+      break;
+    case Char.RemoteKey.BACK:
+      await this.androidTVClient.sendKey(4);
+      break;
+    case Char.RemoteKey.EXIT:
+      await this.androidTVClient.sendKey(4);
+      break;
+    case Char.RemoteKey.PLAY_PAUSE:
+      await this.androidTVClient.sendKey(85);
+      break;
+    case Char.RemoteKey.INFORMATION:
+      await this.androidTVClient.sendKey(82);
+      break;
     }
   }
 
@@ -309,7 +316,7 @@ export class TelevisionAccessory {
       await this.castClient.connect();
       anyConnected = true;
     } catch (e) {
-      this.platform.log.error(`CastClient connect failed:`, e);
+      this.platform.log.error('CastClient connect failed:', e);
     }
     
     const devices = this.platform.config.devices || [];
@@ -321,23 +328,25 @@ export class TelevisionAccessory {
         await this.androidTVClient.connect();
         anyConnected = true;
       } catch (e) {
-        this.platform.log.error(`AndroidTVClient connect failed:`, e);
+        this.platform.log.error('AndroidTVClient connect failed:', e);
       }
     } else {
-      this.platform.log.info(`[TelevisionAccessory] Skipping remote connection: No paired cert saved yet.`);
+      this.platform.log.info('[TelevisionAccessory] Skipping remote connection: No paired cert saved yet.');
     }
 
     if (anyConnected) {
       this.isPowerOn = true;
       this.updateState();
     } else {
-      this.platform.log.error(`Both CastClient and AndroidTVClient failed to connect.`);
+      this.platform.log.error('Both CastClient and AndroidTVClient failed to connect.');
       this.isPowerOn = false;
     }
   }
 
   async updateState() {
-    if (!this.isPowerOn) return;
+    if (!this.isPowerOn) {
+      return;
+    }
     
     try {
       const vol = await this.castClient.getVolume();

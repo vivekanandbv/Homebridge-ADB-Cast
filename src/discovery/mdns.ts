@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import Bonjour, { Service } from 'bonjour-service';
 import { EventEmitter } from 'events';
 
@@ -35,10 +36,14 @@ export class DiscoveryEngine extends EventEmitter {
 
   private onServiceUp(service: Service) {
     const txt = service.txt as any;
-    if (!txt || !txt.id) return;
+    if (!txt || !txt.id) {
+      return;
+    }
     
     const ip = service.addresses?.[0];
-    if (!ip) return;
+    if (!ip) {
+      return;
+    }
 
     const model = txt.md || 'Unknown';
     const name = txt.fn || service.name;
@@ -55,7 +60,7 @@ export class DiscoveryEngine extends EventEmitter {
       model: model,
       ip: ip,
       port: service.port,
-      txt: txt
+      txt: txt,
     };
 
     this.devices.set(device.id, device);

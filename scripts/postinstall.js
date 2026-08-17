@@ -1,3 +1,4 @@
+/* global process, console */
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import https from 'https';
@@ -11,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const urls = {
   darwin: 'https://dl.google.com/android/repository/platform-tools-latest-darwin.zip',
   linux: 'https://dl.google.com/android/repository/platform-tools-latest-linux.zip',
-  win32: 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip'
+  win32: 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip',
 };
 
 async function downloadFile(url, dest) {

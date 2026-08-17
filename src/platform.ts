@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 import { TelevisionAccessory } from './homekit/TelevisionAccessory.js';
@@ -41,7 +42,7 @@ export class ADBCastPlatform implements DynamicPlatformPlugin {
             this.api.hap.uuid.generate(device.ip + '_static_controls_v1'),
             this.api.hap.uuid.generate(device.ip + '_controls_v1'),
             this.api.hap.uuid.generate(deviceId + '_lightbulb_v2'),
-            this.api.hap.uuid.generate(device.ip + '_lightbulb_v2')
+            this.api.hap.uuid.generate(device.ip + '_lightbulb_v2'),
           ];
           
           for (const oldUuid of oldUuids) {
@@ -50,7 +51,7 @@ export class ADBCastPlatform implements DynamicPlatformPlugin {
               this.log.info(`[Platform] Cleaning up old cached accessory: ${oldAccessory.displayName}`);
               try {
                 this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [oldAccessory]);
-              } catch (e) {}
+              } catch (e) { /* ignore */ }
               this.accessories.delete(oldUuid);
             }
           }

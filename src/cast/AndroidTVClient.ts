@@ -1,4 +1,5 @@
-import { AndroidRemote, RemoteKeyCode, RemoteDirection } from 'androidtv-remote';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { AndroidRemote, RemoteKeyCode } from 'androidtv-remote';
 import { EventEmitter } from 'events';
 
 export class AndroidTVClient extends EventEmitter {
@@ -20,7 +21,7 @@ export class AndroidTVClient extends EventEmitter {
       pairing_port: 6467,
       remote_port: 6466,
       name: 'homebridge-adb-cast',
-      cert: this.cert || {}
+      cert: this.cert || {},
     };
 
     this.remote = new AndroidRemote(this.ip, this.options);
@@ -50,17 +51,19 @@ export class AndroidTVClient extends EventEmitter {
     });
 
     this.remote.on('error', (err: any) => {
-      console.error(`[AndroidTV] Error:`, err);
+      console.error('[AndroidTV] Error:', err);
       this.emit('error', err);
     });
   }
 
   async connect() {
-    if (this.isConnected) return;
+    if (this.isConnected) {
+      return;
+    }
     try {
       await this.remote.start();
     } catch (e) {
-      console.error(`[AndroidTV] Start error:`, e);
+      console.error('[AndroidTV] Start error:', e);
       throw e;
     }
   }
@@ -86,6 +89,7 @@ export class AndroidTVClient extends EventEmitter {
     console.log(`[AndroidTV] Requested volume set to ${level}, which is unsupported via standard directional remote API.`);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async setMuted(muted: boolean) {
     this.sendKey(RemoteKeyCode.KEYCODE_MUTE);
   }
