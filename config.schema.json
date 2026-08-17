@@ -1,17 +1,80 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "ADBCast",
   "pluginType": "platform",
   "singular": true,
-  "strictValidation": false,
+  "customUi": true,
+  "headerDisplay": "Homebridge ADB Cast - Android TV Remote",
+  "footerDisplay": "For Google TV devices, enter the pairing code shown on your TV screen.",
   "schema": {
     "type": "object",
-    "required": ["name"],
-    "additionalProperties": false,
     "properties": {
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "Example Dynamic Platform"
+        "required": true,
+        "default": "ADBCast",
+        "description": "Name of the platform."
+      },
+      "devices": {
+        "title": "Configured TVs",
+        "type": "array",
+        "items": {
+          "title": "TV",
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "required": true
+            },
+            "ip": {
+              "title": "IP Address",
+              "type": "string",
+              "required": true
+            },
+            "cert": {
+              "title": "Remote Certificate",
+              "type": "object"
+            },
+            "adbIpPort": {
+              "title": "ADB Endpoint",
+              "type": "string"
+            },
+            "inputs": {
+              "title": "Enabled Apps/Inputs",
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Home",
+                  "YouTube",
+                  "Netflix",
+                  "Prime Video",
+                  "Disney+",
+                  "Apple TV",
+                  "Hulu",
+                  "HBO Max",
+                  "Spotify",
+                  "Plex"
+                ]
+              },
+              "default": ["Home", "YouTube", "Netflix", "Prime Video"]
+            }
+          }
+        }
+      },
+      "pairingCode": {
+        "title": "Android TV Pairing Code",
+        "type": "string",
+        "required": false,
+        "description": "Enter the 6-digit code shown on your Android TV screen during the pairing phase. Leave blank once paired."
+      },
+      "cert": {
+        "title": "Certificate Data (Internal)",
+        "type": "object",
+        "required": false,
+        "description": "Auto-filled after successful pairing."
       }
     }
   }

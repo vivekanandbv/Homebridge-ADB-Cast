@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Cast Setup</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: inherit;
+    }
+    .step { display: none; }
+    .step.active { display: block; }
+
+    .tv-card {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: rgba(255,255,255,0.03);
+    }
+    .tv-card h4 {
+      margin: 0 0 8px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tv-card h4 .ip {
+      font-size: 12px;
+      opacity: 0.5;
+      font-weight: normal;
+    }
+    .tv-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tv-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .tv-badge.ok {
+      background: rgba(40,167,69,0.15);
+      color: #28a745;
+      border: 1px solid rgba(40,167,69,0.3);
+    }
+    .tv-badge.action {
+      background: rgba(255,193,7,0.15);
+      color: #ffc107;
+      border: 1px solid rgba(255,193,7,0.3);
+      cursor: pointer;
+    }
+    .tv-badge.action:hover {
+      background: rgba(255,193,7,0.25);
+    }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .header-row h3 { margin: 0; }
+
+    .loading-wrap {
+      text-align: center;
+      padding: 40px 0;
+    }
+    .loading-wrap .spinner-border {
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .discovery-card {
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .discovery-card:hover {
+      border-color: rgba(255,255,255,0.3);
+    }
+  </style>
+</head>
+<body>
+
+<!-- Step: Dashboard -->
+<div id="step-dashboard" class="step">
+  <div class="header-row">
+    <h3>Configured TVs</h3>
+    <button class="btn btn-primary btn-sm" onclick="discover()">+ Add TV</button>
+  </div>
+  <div id="configured-devices"></div>
+</div>
+
+<!-- Step: Loading -->
+<div id="step-loading" class="step active">
+  <div class="loading-wrap">
+    <div class="spinner-border text-primary" role="status"></div>
+    <div class="mt-3">Scanning your network for TVs...</div>
+  </div>
+</div>
+
+<!-- Step: Discovered Devices -->
+<div id="step-devices" class="step">
+  <h3 class="mb-3">Select a TV to Setup</h3>
+  <div id="device-list"></div>
+  <div style="display: flex; gap: 8px; margin-top: 16px;">
+    <button class="btn btn-primary" onclick="discover()" style="flex: 1;">Refresh</button>
+    <button class="btn btn-default" onclick="showDashboard()" style="flex: 1;">Cancel</button>
+  </div>
+</div>
+
+<!-- Step: Pair Remote -->
+<div id="step-remote" class="step">
+  <h3 class="mb-3">Pair Android TV Remote</h3>
+  <p>A pairing code should appear on your TV screen. Enter it below:</p>
+  <div class="form-group">
+    <input type="text" class="form-control" id="remote-pin" placeholder="Enter PIN from TV" maxlength="6" />
+  </div>
+  <div style="display: flex; gap: 8px; margin-top: 16px;">
+    <button class="btn btn-primary" onclick="pairRemote()" id="btn-pair-remote" style="flex: 1.5;">Pair Remote</button>
+    <button class="btn btn-secondary" onclick="skipToAdb()" style="flex: 1;">Skip</button>
+    <button class="btn btn-default" onclick="showDashboard()" style="flex: 1;">Cancel</button>
+  </div>
+</div>
+
+<!-- Step: Remote Success Info -->
+<div id="step-remote-success" class="step">
+  <div class="alert alert-success">
+    <h4 class="alert-heading">✓ Remote Paired Successfully!</h4>
+    <p style="margin-top: 10px;">To enhance this TV with ADB (for application monitoring), please **Save and Restart Homebridge** first.</p>
+    <p>Once Homebridge has restarted:</p>
+    <ol>
+      <li>Open this plugin configuration again.</li>
+      <li>Click the orange <b>"+ Enhance with ADB"</b> button on the TV card.</li>
+      <li>Follow the on-screen instructions to complete setup.</li>
+    </ol>
+  </div>
+  <div style="display: flex; gap: 8px; margin-top: 20px;">
+    <button class="btn btn-primary" onclick="finishSetup()" style="flex: 1.5;">Save and Close</button>
+    <button class="btn btn-default" onclick="skipToAdb()" style="flex: 1;">Continue to ADB Anyway</button>
+  </div>
+</div>
+
+<!-- Step: Pair ADB -->
+<div id="step-adb" class="step">
+  <h3 class="mb-3">Enhance with ADB (Optional)</h3>
+  <p>ADB enables monitoring native apps like Netflix. To enable:</p>
+  <ol>
+    <li>On your TV, go to <b>Settings → System → About</b></li>
+    <li>Tap <b>"Android TV OS build"</b> 7 times to unlock Developer Options</li>
+    <li>Go back to <b>Settings → System → Developer Options</b></li>
+    <li>Enable <b>Wireless Debugging</b></li>
+    <li>Tap <b>"Pair device with pairing code"</b></li>
+    <li>Enter the port and 6-digit code below:</li>
+  </ol>
+  
+  <div class="form-group" id="manual-port-group" style="margin-bottom: 12px;">
+    <label for="adb-port" style="font-size: 14px; opacity: 0.8; margin-bottom: 4px;">Port (displayed on TV next to IP):</label>
+    <input type="text" class="form-control" id="adb-port" placeholder="e.g. 38421 or 41923" />
+  </div>
+
+  <div class="form-group">
+    <label for="adb-pin" style="font-size: 14px; opacity: 0.8; margin-bottom: 4px;">Pairing Code:</label>
+    <input type="text" class="form-control" id="adb-pin" placeholder="6-digit pairing code" maxlength="6" />
+  </div>
+  <div style="display: flex; gap: 8px; margin-top: 16px;">
+    <button class="btn btn-primary" onclick="pairAdb()" id="btn-pair-adb" style="flex: 1.5;">Pair ADB</button>
+    <button class="btn btn-default" onclick="finishSetup()" style="flex: 1;">Skip ADB</button>
+  </div>
+</div>
+
+<!-- Step: Success -->
+<div id="step-success" class="step">
+  <div class="alert alert-success">
+    <h4 class="alert-heading">Setup Complete!</h4>
+    <p>Your TV has been configured. Restart Homebridge to apply changes.</p>
+  </div>
+  <button class="btn btn-primary" onclick="showDashboard()">Return to Dashboard</button>
+</div>
+
+<script>
+  let pluginConfig = [];
+  let currentDevice = null;
+  let allDevices = [];
+
+  async function init() {
+    try {
+        homebridge.hideSpinner();
+        const config = await homebridge.getPluginConfig();
+        pluginConfig = config.length ? config : [{ name: 'ADBCast', platform: 'ADBCast' }];
+
+        allDevices = pluginConfig[0].devices || [];
+        // If legacy root config exists, has a cert, and has an IP, convert it to a device
+        if (allDevices.length === 0 && pluginConfig[0].cert && pluginConfig[0].ip) {
+            allDevices.push({
+                name: pluginConfig[0].name || 'Google TV',
+                ip: pluginConfig[0].ip || 'Unknown IP',
+                cert: pluginConfig[0].cert,
+                adbIpPort: pluginConfig[0].adbIpPort
+            });
+            pluginConfig[0].devices = allDevices;
+            
+            // Delete legacy root-level properties to prevent re-migration
+            delete pluginConfig[0].cert;
+            delete pluginConfig[0].adbIpPort;
+            delete pluginConfig[0].ip;
+            
+            await homebridge.updatePluginConfig(pluginConfig);
+            await homebridge.savePluginConfig();
+        }
+
+        // Check ADB status from the server and auto-associate if already connected
+        try {
+            const adbStatus = await homebridge.request('/check-adb');
+            if (adbStatus && adbStatus.connected && allDevices.length > 0) {
+                let changed = false;
+                for (const d of allDevices) {
+                    const ipMatches = d.ip && (d.ip === adbStatus.ip || (adbStatus.endpoint && adbStatus.endpoint.startsWith(d.ip + ':')));
+                    if (!d.adbIpPort && adbStatus.endpoint && (ipMatches || !d.ip)) {
+                        d.adbIpPort = adbStatus.endpoint;
+                        if (!d.ip && adbStatus.ip) {
+                            d.ip = adbStatus.ip;
+                        }
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    pluginConfig[0].devices = allDevices;
+                    await homebridge.updatePluginConfig(pluginConfig);
+                    await homebridge.savePluginConfig();
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        renderDashboard();
+        showStep('step-dashboard');
+    } catch (e) {
+        document.body.innerHTML = '<div class="alert alert-danger">Error: ' + e.message + '<br><pre>' + e.stack + '</pre></div>';
+    }
+  }
+
+  function renderDashboard() {
+      const list = document.getElementById('configured-devices');
+      list.innerHTML = '';
+      
+      if (allDevices.length === 0) {
+          list.innerHTML = '<div class="alert alert-info">No TVs configured. Click the "+ Add TV" button above to discover and set up a TV.</div>';
+          return;
+      }
+
+      allDevices.forEach(d => {
+          const card = document.createElement('div');
+          card.className = 'tv-card';
+
+          const remoteBadge = d.cert
+            ? '<span class="tv-badge ok">✓ Remote Paired</span>'
+            : `<span class="tv-badge action" onclick="triggerRemoteSetup('${d.ip}')">⚠ Pair Remote</span>`;
+
+          const adbBadge = d.adbIpPort
+            ? '<span class="tv-badge ok">✓ ADB Connected</span>'
+            : `<span class="tv-badge action" onclick="triggerAdbSetup('${d.ip}')">+ Enhance with ADB</span>`;
+
+          card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h4 style="margin: 0 0 8px 0; display: inline-block;">${d.name || 'Android TV'}</h4>
+                <span class="ip" style="font-size: 12px; opacity: 0.5; margin-left: 8px;">(${d.ip || ''})</span>
+                <div class="tv-badges" style="margin-top: 4px;">
+                  ${remoteBadge}
+                  ${adbBadge}
+                </div>
+              </div>
+              <button class="btn btn-danger btn-sm" onclick="handleDelete(this, '${d.ip}')" style="background-color: #d9534f; border-color: #d43f3a; color: white; transition: all 0.2s;">Delete</button>
+            </div>
+          `;
+          list.appendChild(card);
+      });
+  }
+
+  function handleDelete(btn, ip) {
+      if (btn.classList.contains('confirm-btn')) {
+          deleteDevice(ip);
+      } else {
+          btn.classList.add('confirm-btn');
+          btn.innerText = 'Confirm Delete';
+          btn.style.backgroundColor = '#f0ad4e';
+          btn.style.borderColor = '#eea236';
+          
+          // Reset button state if not clicked in 3 seconds
+          setTimeout(() => {
+              btn.classList.remove('confirm-btn');
+              btn.innerText = 'Delete';
+              btn.style.backgroundColor = '#d9534f';
+              btn.style.borderColor = '#d43f3a';
+          }, 3000);
+      }
+  }
+
+  async function deleteDevice(ip) {
+      try {
+          const d = allDevices.find(x => x.ip === ip) || {};
+          
+          // Command server to run adb disconnect for this TV
+          try {
+              await homebridge.request('/delete-device', { ip: ip, adbIpPort: d.adbIpPort });
+          } catch (e) { /* ignore */ }
+
+          allDevices = allDevices.filter(x => x.ip !== ip);
+          pluginConfig[0].devices = allDevices;
+
+          // Nuke any legacy root-level configs as well
+          delete pluginConfig[0].cert;
+          delete pluginConfig[0].adbIpPort;
+          delete pluginConfig[0].ip;
+
+          await homebridge.updatePluginConfig(pluginConfig);
+          await homebridge.savePluginConfig();
+          homebridge.toast.success('TV removed from settings. Restart Homebridge to apply.', 'Deleted');
+          renderDashboard();
+      } catch (e) {
+          homebridge.toast.error(e.message, 'Delete Failed');
+      }
+  }
+
+  function showDashboard() {
+      renderDashboard();
+      showStep('step-dashboard');
+  }
+
+  function triggerAdbSetup(ip) {
+      currentDevice = { ip: ip, name: 'TV' };
+      
+      // Clear inputs
+      document.getElementById('adb-port').value = '';
+      document.getElementById('adb-pin').value = '';
+      
+      // Go directly to the ADB step without loading screen
+      showStep('step-adb');
+      
+      // Perform background discovery to pre-fill the port if found
+      homebridge.request('/discover').then(devices => {
+          const found = devices.find(x => x.ip === ip);
+          if (found && found.adbPairingEndpoint) {
+              currentDevice.adbPairingEndpoint = found.adbPairingEndpoint;
+              currentDevice.adbConnectEndpoint = found.adbConnectEndpoint;
+              const portMatch = found.adbPairingEndpoint.match(/:(\d+)$/);
+              if (portMatch) {
+                  document.getElementById('adb-port').value = portMatch[1];
+              }
+          }
+      }).catch(() => { /* ignore */ });
+  }
+
+  async function triggerRemoteSetup(ip) {
+      currentDevice = { ip: ip, name: 'TV' };
+      showStep('step-loading');
+      document.querySelector('#step-loading div.mt-3').innerText = 'Requesting PIN from TV...';
+      try {
+          const res = await homebridge.request('/start-remote-pairing', { ip: ip });
+          if (res.success) {
+              showStep('step-remote');
+          } else {
+              homebridge.toast.error(res.message || 'Failed to request PIN from TV', 'Remote Pairing');
+              showDashboard();
+          }
+      } catch (e) {
+          homebridge.toast.error(e.message, 'Error');
+          showDashboard();
+      }
+      document.querySelector('#step-loading div.mt-3').innerText = 'Scanning your network for TVs...';
+  }
+
+  function showStep(id) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  async function discover() {
+    showStep('step-loading');
+    try {
+      const devices = await homebridge.request('/discover');
+      const list = document.getElementById('device-list');
+      list.innerHTML = '';
+
+      if (!devices || devices.length === 0) {
+        list.innerHTML = '<div class="alert alert-warning">No devices found. Ensure your TV is on and on the same network.</div>';
+      } else {
+        devices.forEach(d => {
+          const card = document.createElement('div');
+          card.className = 'tv-card discovery-card';
+          card.innerHTML = `
+            <h4>${d.name || d.ip}</h4>
+            <div class="tv-badges">
+              <span class="tv-badge ${d.cast ? 'ok' : ''}">Cast</span>
+              <span class="tv-badge ${d.remote ? 'ok' : ''}">Remote</span>
+              <span class="tv-badge ${d.adbConnect ? 'ok' : ''}">ADB</span>
+            </div>
+          `;
+          card.onclick = () => selectDevice(d);
+          list.appendChild(card);
+        });
+      }
+      showStep('step-devices');
+    } catch (e) {
+      homebridge.toast.error(e.message, 'Discovery Failed');
+      showStep('step-devices');
+    }
+  }
+
+  async function selectDevice(device) {
+    currentDevice = device;
+    let devConf = allDevices.find(d => d.ip === device.ip);
+    if (!devConf) {
+      devConf = { name: device.name || 'Android TV', ip: device.ip };
+      allDevices.push(devConf);
+    }
+    if (devConf.cert) {
+      skipToAdb();
+    } else {
+      showStep('step-loading');
+      document.querySelector('#step-loading div.mt-3').innerText = 'Requesting PIN from TV...';
+      try {
+        const res = await homebridge.request('/start-remote-pairing', { ip: currentDevice.ip });
+        if (res.success) {
+          showStep('step-remote');
+        } else {
+          homebridge.toast.error(res.message || 'Failed to request PIN from TV', 'Remote Pairing');
+          showDashboard();
+        }
+      } catch (e) {
+        homebridge.toast.error(e.message, 'Error');
+        showDashboard();
+      }
+      document.querySelector('#step-loading div.mt-3').innerText = 'Scanning your network for TVs...';
+    }
+  }
+
+  async function pairRemote() {
+    const pin = document.getElementById('remote-pin').value;
+    if (!pin) return;
+    const btn = document.getElementById('btn-pair-remote');
+    btn.innerText = 'Pairing...';
+    btn.disabled = true;
+    try {
+      const res = await homebridge.request('/submit-remote-pin', { code: pin });
+      if (res.success) {
+        homebridge.toast.success('Remote Paired!');
+        let devConf = allDevices.find(d => d.ip === currentDevice.ip);
+        devConf.cert = res.cert;
+        await homebridge.updatePluginConfig(pluginConfig);
+        showStep('step-remote-success');
+      } else {
+        homebridge.toast.error(res.message || 'Incorrect PIN. Requesting new PIN...', 'Pairing Failed');
+        document.getElementById('remote-pin').value = '';
+        triggerRemoteSetup(currentDevice.ip);
+      }
+    } catch (e) {
+      homebridge.toast.error(e.message, 'Error');
+      triggerRemoteSetup(currentDevice.ip);
+    }
+    btn.innerText = 'Pair Remote';
+    btn.disabled = false;
+  }
+
+  function skipToAdb() {
+    showStep('step-adb');
+  }
+
+  async function pairAdb() {
+    const pin = document.getElementById('adb-pin').value;
+    if (!pin) return;
+    
+    let endpoint = currentDevice.adbPairingEndpoint;
+    if (!endpoint) {
+        const port = document.getElementById('adb-port').value;
+        if (port) {
+            endpoint = `${currentDevice.ip}:${port}`;
+        }
+    }
+    
+    if (!endpoint) {
+      homebridge.toast.error('ADB pairing endpoint not found. Please enter the Port displayed on your TV.');
+      document.getElementById('manual-port-group').style.display = 'block';
+      return;
+    }
+    
+    const btn = document.getElementById('btn-pair-adb');
+    btn.innerText = 'Pairing...';
+    btn.disabled = true;
+    try {
+      const res = await homebridge.request('/pair-adb', { endpoint: endpoint, code: pin });
+      if (res.success) {
+        homebridge.toast.success('ADB Paired!');
+        let devConf = allDevices.find(d => d.ip === currentDevice.ip);
+        devConf.adbIpPort = currentDevice.adbConnectEndpoint || `${currentDevice.ip}:5555`;
+        await homebridge.updatePluginConfig(pluginConfig);
+        finishSetup();
+      } else {
+        homebridge.toast.error(res.message, 'ADB Pairing Failed');
+      }
+    } catch (e) {
+      homebridge.toast.error(e.message, 'Error');
+    }
+    btn.innerText = 'Pair ADB';
+    btn.disabled = false;
+  }
+
+  async function finishSetup() {
+    await homebridge.updatePluginConfig(pluginConfig);
+    homebridge.savePluginConfig();
+    showStep('step-success');
+  }
+
+  // Initialize
+  homebridge.addEventListener('ready', () => {
+    init();
+  });
+</script>
+
+</body>
+</html>

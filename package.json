@@ -1,9 +1,8 @@
 {
-  "name": "homebridge-plugin-name",
-  "displayName": "Plugin Name",
+  "name": "homebridge-adb-cast",
+  "displayName": "Homebridge-ADB-Cast",
   "type": "module",
   "version": "1.0.0",
-  "private": true,
   "description": "A short description about what your plugin does.",
   "author": "Your Name",
   "license": "Apache-2.0",
@@ -28,9 +27,14 @@
     "build": "rimraf ./dist && tsc",
     "lint": "eslint . --max-warnings=0",
     "prepublishOnly": "npm run lint && npm run build",
-    "watch": "npm run build && npm link && nodemon"
+    "watch": "npm run build && npm link && nodemon",
+    "postinstall": "node scripts/postinstall.js"
   },
   "dependencies": {
+    "@foxxmd/chromecast-client": "^1.0.4",
+    "@homebridge/plugin-ui-utils": "^2.2.5",
+    "androidtv-remote": "^1.0.10",
+    "bonjour-service": "^1.4.4",
     "homebridge-lib": "^8.0.1"
   },
   "devDependencies": {
@@ -41,6 +45,7 @@
     "nodemon": "^3.1.14",
     "rimraf": "^6.1.3",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.2"
   }

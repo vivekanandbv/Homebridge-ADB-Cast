@@ -1,150 +1,149 @@
-import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
-
-import { ExamplePlatformAccessory } from './platformAccessory.js';
+import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
+import { TelevisionAccessory } from './homekit/TelevisionAccessory.js';
+import { DiscoveryEngine, DiscoveredDevice } from './discovery/mdns.js';
 
-// This is only required when using Custom Services and Characteristics not support by HomeKit
-import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
-
-/**
- * HomebridgePlatform
- * This class is the main constructor for your plugin, this is where you should
- * parse the user config and discover/register accessories with Homebridge.
- */
-export class ExampleHomebridgePlatform implements DynamicPlatformPlugin {
+export class ADBCastPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
 
-  // this is used to track restored cached accessories
   public readonly accessories: Map<string, PlatformAccessory> = new Map();
-  public readonly discoveredCacheUUIDs: string[] = [];
-
-  // This is only required when using Custom Services and Characteristics not support by HomeKit
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomServices: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public readonly CustomCharacteristics: any;
+  private discovery: DiscoveryEngine;
+  private activeDevicesByIp: Set<string> = new Set();
 
   constructor(
-    public readonly log: Logging,
+    public readonly log: Logger,
     public readonly config: PlatformConfig,
     public readonly api: API,
   ) {
-    this.Service = api.hap.Service;
-    this.Characteristic = api.hap.Characteristic;
-
-    // This is only required when using Custom Services and Characteristics not support by HomeKit
-    this.CustomServices = new EveHomeKitTypes(this.api).Services;
-    this.CustomCharacteristics = new EveHomeKitTypes(this.api).Characteristics;
+    this.Service = this.api.hap.Service;
+    this.Characteristic = this.api.hap.Characteristic;
 
     this.log.debug('Finished initializing platform:', this.config.name);
 
-    // When this event is fired it means Homebridge has restored all cached accessories from disk.
-    // Dynamic Platform plugins should only register new accessories after this event was fired,
-    // in order to ensure they weren't added to homebridge already. This event can also be used
-    // to start discovery of new accessories.
+    this.discovery = new DiscoveryEngine();
+
     this.api.on('didFinishLaunching', () => {
-      log.debug('Executed didFinishLaunching callback');
-      // run the method to discover / register your devices as accessories
-      this.discoverDevices();
+      this.log.debug('Executed didFinishLaunching callback');
+      
+      // Load all configured devices on startup immediately
+      const devices = this.config.devices || [];
+      for (const device of devices) {
+        if (device.ip) {
+          const deviceId = device.id || (device.ip + '_static');
+          
+          // Cleanup old accessories from previous architecture if they exist in cache
+          const oldUuids = [
+            this.api.hap.uuid.generate(deviceId + '_controls_v1'),
+            this.api.hap.uuid.generate(deviceId + '_static_controls_v1'),
+            this.api.hap.uuid.generate(deviceId + '_static_v5'),
+            this.api.hap.uuid.generate(device.ip + '_static_v5'),
+            this.api.hap.uuid.generate(device.ip + '_static_controls_v1'),
+            this.api.hap.uuid.generate(device.ip + '_controls_v1'),
+            this.api.hap.uuid.generate(deviceId + '_lightbulb_v2'),
+            this.api.hap.uuid.generate(device.ip + '_lightbulb_v2')
+          ];
+          
+          for (const oldUuid of oldUuids) {
+            const oldAccessory = this.accessories.get(oldUuid);
+            if (oldAccessory) {
+              this.log.info(`[Platform] Cleaning up old cached accessory: ${oldAccessory.displayName}`);
+              try {
+                this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [oldAccessory]);
+              } catch (e) {}
+              this.accessories.delete(oldUuid);
+            }
+          }
+          
+          this.log.info(`[Platform] Initializing configured device on startup: ${device.name || 'Google TV'} (${device.ip})`);
+          this.setupConfiguredDevice(device);
+        }
+      }
+
+      this.discovery.on('device_discovered', this.onDeviceDiscovered.bind(this));
+      this.discovery.start();
     });
   }
 
-  /**
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to set up event handlers for characteristics and update respective values.
-   */
   configureAccessory(accessory: PlatformAccessory) {
     this.log.info('Loading accessory from cache:', accessory.displayName);
-
-    // add the restored accessory to the accessories cache, so we can track if it has already been registered
     this.accessories.set(accessory.UUID, accessory);
   }
 
-  /**
-   * This is an example method showing how to register discovered accessories.
-   * Accessories must only be registered once, previously created accessories
-   * must not be registered again to prevent "duplicate UUID" errors.
-   */
-  discoverDevices() {
-    // EXAMPLE ONLY
-    // A real plugin you would discover accessories from the local network, cloud services
-    // or a user-defined array in the platform config.
-    const exampleDevices = [
-      {
-        exampleUniqueId: 'ABCD',
-        exampleDisplayName: 'Bedroom',
-      },
-      {
-        exampleUniqueId: 'EFGH',
-        exampleDisplayName: 'Kitchen',
-      },
-      {
-        // This is an example of a device which uses a Custom Service
-        exampleUniqueId: 'IJKL',
-        exampleDisplayName: 'Backyard',
-        CustomService: 'AirPressureSensor',
-      },
-    ];
+  setupConfiguredDevice(device: any) {
+    if (this.activeDevicesByIp.has(device.ip)) {
+      return;
+    }
+    this.activeDevicesByIp.add(device.ip);
 
-    // loop over the discovered devices and register each one if it has not already been registered
-    for (const device of exampleDevices) {
-      // generate a unique id for the accessory this should be generated from
-      // something globally unique, but constant, for example, the device serial
-      // number or MAC address
-      const uuid = this.api.hap.uuid.generate(device.exampleUniqueId);
+    const deviceId = device.id || (device.ip + '_static');
+    const displayName = device.name || 'Google TV';
 
-      // see if an accessory with the same uuid has already been registered and restored from
-      // the cached devices we stored in the `configureAccessory` method above
-      const existingAccessory = this.accessories.get(uuid);
+    // 1. Setup the TV Accessory (External)
+    const tvUuid = this.api.hap.uuid.generate(deviceId + '_tv_v2');
+    const tvAccessory = new this.api.platformAccessory(displayName, tvUuid, this.api.hap.Categories.TELEVISION);
+    tvAccessory.context.device = { id: deviceId, name: displayName, ip: device.ip };
 
-      if (existingAccessory) {
-        // the accessory already exists
-        this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
+    // 2. Setup the Volume Dimmer Lightbulb (Bridged)
+    const bulbUuid = this.api.hap.uuid.generate(deviceId + '_volbulb_v1');
+    let bulbAccessory = this.accessories.get(bulbUuid);
 
-        // if you need to update the accessory.context then you should run `api.updatePlatformAccessories`. e.g.:
-        // existingAccessory.context.device = device;
-        // this.api.updatePlatformAccessories([existingAccessory]);
-
-        // create the accessory handler for the restored accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, existingAccessory);
-
-        // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, e.g.:
-        // remove platform accessories when no longer present
-        // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existingAccessory]);
-        // this.log.info('Removing existing accessory from cache:', existingAccessory.displayName);
-      } else {
-        // the accessory does not yet exist, so we need to create it
-        this.log.info('Adding new accessory:', device.exampleDisplayName);
-
-        // create a new accessory
-        const accessory = new this.api.platformAccessory(device.exampleDisplayName, uuid);
-
-        // store a copy of the device object in the `accessory.context`
-        // the `context` property can be used to store any data about the accessory you may need
-        accessory.context.device = device;
-
-        // create the accessory handler for the newly create accessory
-        // this is imported from `platformAccessory.ts`
-        new ExamplePlatformAccessory(this, accessory);
-
-        // link the accessory to your platform
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      }
-
-      // push into discoveredCacheUUIDs
-      this.discoveredCacheUUIDs.push(uuid);
+    if (!bulbAccessory) {
+      this.log.info('Adding Volume Dimmer Lightbulb:', displayName + ' Volume');
+      bulbAccessory = new this.api.platformAccessory(displayName + ' Volume', bulbUuid, this.api.hap.Categories.LIGHTBULB);
+      bulbAccessory.context.device = { id: deviceId, name: displayName + ' Volume', ip: device.ip };
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [bulbAccessory]);
+      this.accessories.set(bulbUuid, bulbAccessory);
+    } else {
+      this.log.info('Restoring Volume Dimmer Lightbulb from cache:', bulbAccessory.displayName);
+      bulbAccessory.context.device = { id: deviceId, name: displayName + ' Volume', ip: device.ip };
+      this.api.updatePlatformAccessories([bulbAccessory]);
     }
 
-    // you can also deal with accessories from the cache which are no longer present by removing them from Homebridge
-    // for example, if your plugin logs into a cloud account to retrieve a device list, and a user has previously removed a device
-    // from this cloud account, then this device will no longer be present in the device list but will still be in the Homebridge cache
-    for (const [uuid, accessory] of this.accessories) {
-      if (!this.discoveredCacheUUIDs.includes(uuid)) {
-        this.log.info('Removing existing accessory from cache:', accessory.displayName);
-        this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      }
+    new TelevisionAccessory(this, tvAccessory, bulbAccessory, device.ip);
+
+    try {
+      this.api.publishExternalAccessories(PLUGIN_NAME, [tvAccessory]);
+    } catch (e) {
+      this.log.error('Failed to publish external TV accessory:', e);
+    }
+  }
+
+  onDeviceDiscovered(device: DiscoveredDevice) {
+    if (this.activeDevicesByIp.has(device.ip)) {
+      this.log.info(`[Platform] Discovered device ${device.name} via mDNS, but it is already active. Ignoring.`);
+      return;
+    }
+    this.activeDevicesByIp.add(device.ip);
+
+    const uuid = this.api.hap.uuid.generate(device.id + '_tv_v2');
+    const displayName = device.name;
+    this.log.info('Publishing newly discovered accessory as a Television:', displayName);
+    const tvAccessory = new this.api.platformAccessory(displayName, uuid, this.api.hap.Categories.TELEVISION);
+    tvAccessory.context.device = device;
+
+    // Setup the Volume Dimmer Lightbulb (Bridged)
+    const bulbUuid = this.api.hap.uuid.generate(device.id + '_volbulb_v1');
+    let bulbAccessory = this.accessories.get(bulbUuid);
+
+    if (!bulbAccessory) {
+      this.log.info('Adding Volume Dimmer Lightbulb:', displayName + ' Volume');
+      bulbAccessory = new this.api.platformAccessory(displayName + ' Volume', bulbUuid, this.api.hap.Categories.LIGHTBULB);
+      bulbAccessory.context.device = { id: device.id, name: displayName + ' Volume', ip: device.ip };
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [bulbAccessory]);
+      this.accessories.set(bulbUuid, bulbAccessory);
+    } else {
+      this.log.info('Restoring Volume Dimmer Lightbulb from cache:', bulbAccessory.displayName);
+      bulbAccessory.context.device = { id: device.id, name: displayName + ' Volume', ip: device.ip };
+      this.api.updatePlatformAccessories([bulbAccessory]);
+    }
+
+    new TelevisionAccessory(this, tvAccessory, bulbAccessory, device.ip);
+
+    try {
+      this.api.publishExternalAccessories(PLUGIN_NAME, [tvAccessory]);
+    } catch (e) {
+      this.log.error('Failed to publish external TV accessory:', e);
     }
   }
 }
