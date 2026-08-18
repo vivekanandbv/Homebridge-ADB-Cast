@@ -1,6 +1,16 @@
 # Homebridge ADB Cast Plugin
 
-A premium Homebridge plugin that integrates Google Chromecast and Android TV devices into Apple HomeKit with support for remote control widgets, dynamic volume dimmers, input switching, and real-time playback synchronization.
+An integrated Homebridge plugin that integrates Google Chromecast and Android TV devices into Apple HomeKit with support for remote control widgets, dynamic volume dimmers, input switching, and real-time playback synchronization.
+
+——
+
+## Beta Installation
+
+This plugin is currently in beta and is not yet published to npm.
+
+Install the latest beta directly from GitHub:
+
+npm install -g github:vivekanandbv/Homebridge-ADB-Cast
 
 ---
 
