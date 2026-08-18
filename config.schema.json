@@ -60,6 +60,23 @@
                 ]
               },
               "default": ["Home", "YouTube", "Netflix", "Prime Video"]
+            },
+            "customApps": {
+              "title": "Custom App Packges",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "required": true
+                  },
+                  "package": {
+                    "type": "string",
+                    "required": true
+                  }
+                }
+              }
             }
           }
         }

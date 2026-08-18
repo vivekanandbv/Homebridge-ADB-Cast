@@ -200,6 +200,7 @@ export class TelevisionAccessory {
     const devices = this.platform.config.devices || [];
     const deviceConfig = devices.find((d: any) => d.ip === this.tvAccessory.context.device.ip) || {};
     const enabledInputs = deviceConfig.inputs || ['Home', 'YouTube', 'Netflix', 'Prime Video'];
+    const customApps = deviceConfig.customApps || [];
 
     const existingInputs = this.tvAccessory.services.filter(s => s.UUID === this.platform.Service.InputSource.UUID);
     for (const s of existingInputs) {
@@ -208,9 +209,15 @@ export class TelevisionAccessory {
 
     this.inputServices = [];
 
+    // Merge standard appPackageMap with configured customApps
+    const localAppMap = { ...appPackageMap };
+    for (const app of customApps) {
+      localAppMap[app.name] = { package: app.package, type: 10 }; // APPLICATION = 10
+    }
+
     let id = 1;
     for (const inputName of enabledInputs) {
-      const target = appPackageMap[inputName];
+      const target = localAppMap[inputName];
       if (!target) {
         continue;
       }
@@ -233,13 +240,20 @@ export class TelevisionAccessory {
     const devices = this.platform.config.devices || [];
     const deviceConfig = devices.find((d: any) => d.ip === this.tvAccessory.context.device.ip) || {};
     const enabledInputs = deviceConfig.inputs || ['Home', 'YouTube', 'Netflix', 'Prime Video'];
+    const customApps = deviceConfig.customApps || [];
     
     const inputName = enabledInputs[id - 1];
     if (!inputName) {
       return;
     }
 
-    const target = appPackageMap[inputName];
+    // Merge standard appPackageMap with configured customApps
+    const localAppMap = { ...appPackageMap };
+    for (const app of customApps) {
+      localAppMap[app.name] = { package: app.package, type: 10 };
+    }
+
+    const target = localAppMap[inputName];
     if (!target) {
       return;
     }

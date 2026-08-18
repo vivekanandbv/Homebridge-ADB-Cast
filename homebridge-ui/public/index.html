@@ -264,21 +264,172 @@
             ? '<span class="tv-badge ok">✓ ADB Connected</span>'
             : `<span class="tv-badge action" onclick="triggerAdbSetup('${d.ip}')">+ Enhance with ADB</span>`;
 
+          const enabledInputs = d.inputs || ['Home', 'YouTube', 'Netflix', 'Prime Video'];
+          const customApps = d.customApps || [];
+
+          // Standard list
+          const standardApps = ['Home', 'YouTube', 'Netflix', 'Prime Video', 'Disney+', 'Apple TV', 'Hulu', 'HBO Max', 'Spotify', 'Plex'];
+          const availableStandardApps = standardApps.filter(app => !enabledInputs.includes(app));
+
+          // Checkboxes for only enabled inputs (unchecking will remove it)
+          const appCheckboxes = enabledInputs.map(app => {
+              return `
+                <label style="display: inline-flex; align-items: center; margin-right: 12px; margin-bottom: 6px; font-weight: normal; cursor: pointer; font-size: 13px;">
+                  <input type="checkbox" checked style="margin-right: 4px;" onchange="toggleInput('${d.ip}', '${app}', false)" />
+                  ${app}
+                </label>
+              `;
+          }).join('');
+
+          const dropdownOptions = availableStandardApps.map(app => `
+            <option value="${app}">${app}</option>
+          `).join('');
+
+          const customAppsHtml = customApps.length === 0 ? '' : `
+            <div style="margin-top: 6px; font-size: 12px; opacity: 0.8; margin-bottom: 4px;">
+              <span style="font-weight: bold;">Custom Apps:</span>
+              ${customApps.map(app => `
+                <span class="badge" style="background-color: rgba(255,255,255,0.08); margin-right: 6px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px;">
+                  ${app.name} (${app.package})
+                </span>
+              `).join('')}
+            </div>
+          `;
+
+          const formSafeIp = d.ip.replace(/\./g, '_');
+
           card.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <div>
-                <h4 style="margin: 0 0 8px 0; display: inline-block;">${d.name || 'Android TV'}</h4>
+                <h4 style="margin: 0 0 4px 0; display: inline-block;">${d.name || 'Android TV'}</h4>
                 <span class="ip" style="font-size: 12px; opacity: 0.5; margin-left: 8px;">(${d.ip || ''})</span>
-                <div class="tv-badges" style="margin-top: 4px;">
+                <div class="tv-badges" style="margin-top: 4px; margin-bottom: 8px;">
                   ${remoteBadge}
                   ${adbBadge}
                 </div>
               </div>
               <button class="btn btn-danger btn-sm" onclick="handleDelete(this, '${d.ip}')" style="background-color: #d9534f; border-color: #d43f3a; color: white; transition: all 0.2s;">Delete</button>
             </div>
+            <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">
+              <div style="font-size: 12px; font-weight: bold; opacity: 0.8; margin-bottom: 6px;">Enabled Input Sources:</div>
+              <div style="display: flex; flex-wrap: wrap; margin-bottom: 6px;">
+                ${appCheckboxes.length ? appCheckboxes : '<span style="font-size: 13px; opacity: 0.5; margin-bottom: 6px;">No inputs enabled.</span>'}
+              </div>
+
+              ${customAppsHtml}
+
+              <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                <select class="form-control input-sm" style="width: 180px; height: 28px; font-size: 12px; padding: 2px 6px; display: inline-block; background-color: #2e2e2e; border-color: #444; color: #fff;" onchange="handleDropdownChange('${d.ip}', this)">
+                  <option value="">+ Add App/Source...</option>
+                  ${dropdownOptions}
+                  <option value="__custom">-- Custom App --</option>
+                </select>
+              </div>
+
+              <div id="custom-app-form-${formSafeIp}" style="display: none; margin-top: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 8px; border-radius: 4px;">
+                <div style="font-size: 11px; font-weight: bold; margin-bottom: 6px;">Add Custom App:</div>
+                <div style="display: flex; gap: 6px;">
+                  <input type="text" id="cust-name-${formSafeIp}" placeholder="App Name (e.g. Kodi)" class="form-control input-sm" style="flex: 1; height: 26px; font-size: 11px; padding: 2px 6px; background-color: #1e1e1e; border-color: #444; color: #fff;" />
+                  <input type="text" id="cust-pkg-${formSafeIp}" placeholder="Package Name" class="form-control input-sm" style="flex: 1.5; height: 26px; font-size: 11px; padding: 2px 6px; background-color: #1e1e1e; border-color: #444; color: #fff;" />
+                  <button class="btn btn-primary btn-sm" onclick="addCustomApp('${d.ip}')" style="height: 26px; line-height: 12px; font-size: 11px; padding: 2px 8px;">Add</button>
+                  <button class="btn btn-default btn-sm" onclick="hideCustomForm('${d.ip}')" style="height: 26px; line-height: 12px; font-size: 11px; padding: 2px 8px;">Cancel</button>
+                </div>
+              </div>
+            </div>
           `;
           list.appendChild(card);
       });
+  }
+
+  async function handleDropdownChange(ip, select) {
+      const val = select.value;
+      if (!val) return;
+      
+      if (val === '__custom') {
+          const formId = `custom-app-form-${ip.replace(/\./g, '_')}`;
+          document.getElementById(formId).style.display = 'block';
+          select.value = '';
+          return;
+      }
+
+      const device = allDevices.find(d => d.ip === ip);
+      if (!device) return;
+
+      if (!device.inputs) {
+          device.inputs = ['Home', 'YouTube', 'Netflix', 'Prime Video'];
+      }
+      if (!device.inputs.includes(val)) {
+          device.inputs.push(val);
+      }
+
+      select.value = '';
+      await homebridge.updatePluginConfig(pluginConfig);
+      renderDashboard();
+  }
+
+  function hideCustomForm(ip) {
+      const formId = `custom-app-form-${ip.replace(/\./g, '_')}`;
+      document.getElementById(formId).style.display = 'none';
+  }
+
+  async function addCustomApp(ip) {
+      const formSafeIp = ip.replace(/\./g, '_');
+      const nameInput = document.getElementById(`cust-name-${formSafeIp}`);
+      const pkgInput = document.getElementById(`cust-pkg-${formSafeIp}`);
+      const name = nameInput.value.trim();
+      const pkg = pkgInput.value.trim();
+
+      if (!name || !pkg) {
+          alert('Please enter both the App Name and Android Package Name.');
+          return;
+      }
+
+      const device = allDevices.find(d => d.ip === ip);
+      if (!device) return;
+
+      if (!device.customApps) {
+          device.customApps = [];
+      }
+
+      if (device.customApps.some(app => app.name.toLowerCase() === name.toLowerCase())) {
+          alert('An app with this name already exists.');
+          return;
+      }
+
+      device.customApps.push({ name, package: pkg });
+
+      if (!device.inputs) {
+          device.inputs = ['Home', 'YouTube', 'Netflix', 'Prime Video'];
+      }
+      if (!device.inputs.includes(name)) {
+          device.inputs.push(name);
+      }
+
+      nameInput.value = '';
+      pkgInput.value = '';
+
+      await homebridge.updatePluginConfig(pluginConfig);
+      renderDashboard();
+  }
+
+  async function toggleInput(ip, appName, isChecked) {
+      const device = allDevices.find(d => d.ip === ip);
+      if (!device) return;
+      if (!device.inputs) {
+          device.inputs = ['Home', 'YouTube', 'Netflix', 'Prime Video'];
+      }
+      if (isChecked) {
+          if (!device.inputs.includes(appName)) {
+              device.inputs.push(appName);
+          }
+      } else {
+          device.inputs = device.inputs.filter(x => x !== appName);
+          if (device.customApps) {
+              device.customApps = device.customApps.filter(app => app.name !== appName);
+          }
+      }
+      await homebridge.updatePluginConfig(pluginConfig);
+      renderDashboard();
   }
 
   function handleDelete(btn, ip) {
